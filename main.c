@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 
@@ -102,6 +103,30 @@ struct range get_range(char **command, lines lines, int current_line) {
 	return result;
 }
 
+void append_lines(lines *lines, int at_line) {
+	char *line = NULL;
+	size_t line_length = 0;
+	int nread;
+	while (-1 != (nread = getline(&line, &line_length, stdin))) {
+		if (0 == strcmp(".\n", line)) {
+			return;
+		}
+		lines->length += 1;
+		if (lines->length > lines->capacity) {
+			lines->capacity *= 2;
+			lines->lines = realloc(lines->lines, lines->capacity * sizeof(*lines->lines));
+		}
+		memmove(lines->lines+at_line+2, lines->lines+at_line+1, ((lines->length - 1) - at_line)*sizeof(*lines->lines));
+		lines->lines[at_line+1].str = line;
+		lines->lines[at_line+1].len = nread;
+		lines->lines[at_line+1].cap = line_length;
+		at_line++;
+		line = NULL;
+		line_length = 0;
+	}
+}
+
+
 int main() {
 	lines lines;
 	printf("%d\n", read_file("./test", &lines));
@@ -139,6 +164,10 @@ int main() {
 					break;
 				}
 				print_line(lines, current_line);
+				break;
+
+			case 'a':
+				append_lines(&lines, range.start);
 				break;
 			case 'w':
 				write_file("./test", lines);
