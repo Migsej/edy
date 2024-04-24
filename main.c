@@ -127,6 +127,15 @@ void insert_lines(lines *lines, int at_line) {
 }
 
 
+void delete_lines(lines *lines, struct range range) {
+	assert(range.end >= range.start);
+	for (int i = range.start; i <= range.end; i++) {
+		free(lines->lines[i].str);
+	}
+	memmove(lines->lines+range.start, lines->lines+range.end+1, (lines->length-range.end+1)*sizeof(*lines->lines));
+	lines->length -= (range.end+1)  - range.start;
+}
+
 void append_lines(lines *lines, int at_line) {
 	char *line = NULL;
 	size_t line_length = 0;
@@ -141,10 +150,10 @@ void append_lines(lines *lines, int at_line) {
 			lines->lines = realloc(lines->lines, lines->capacity * sizeof(*lines->lines));
 		}
 		memmove(lines->lines+at_line+2, lines->lines+at_line+1, ((lines->length - 1) - at_line)*sizeof(*lines->lines));
-		lines->lines[at_line+1].str = line;
-		lines->lines[at_line+1].len = nread;
-		lines->lines[at_line+1].cap = line_length;
 		at_line++;
+		lines->lines[at_line].str = line;
+		lines->lines[at_line].len = nread;
+		lines->lines[at_line].cap = line_length;
 		line = NULL;
 		line_length = 0;
 	}
@@ -194,6 +203,13 @@ int main() {
 				break;
 			case 'a':
 				append_lines(&lines, range.start);
+				break;
+			case 'c':
+				delete_lines(&lines, range);
+				insert_lines(&lines, range.start);
+				break;
+			case 'd':
+				delete_lines(&lines, range);
 				break;
 			case 'w':
 				write_file("./test", lines);
