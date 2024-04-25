@@ -33,7 +33,12 @@ void write_file(char *file, lines lines) {
 
 int read_file(char *file, lines *result) {
 	FILE *fp = fopen(file, "r");
-	assert(fp != NULL);
+	if (fp == NULL) {
+		result->capacity = 200;
+		result->length = 0;
+		result->lines = calloc(result->capacity, sizeof(*result->lines));
+		return 0;
+	}
 	result->capacity = 200;
 	result->length = 0;
 	result->lines = calloc(result->capacity, sizeof(*result->lines));
@@ -123,6 +128,15 @@ void append_lines(lines *lines, int at_line) {
 		if (0 == strcmp(".\n", line)) {
 			return;
 		}
+		if (lines->length == 0) {
+			lines->length += 1;
+			lines->lines[0].str = line;
+			lines->lines[at_line].len = nread;
+			lines->lines[at_line].cap = line_length;
+			line = NULL;
+			line_length = 0;
+			continue;
+		}
 		lines->length += 1;
 		if (lines->length > lines->capacity) {
 			lines->capacity *= 2;
@@ -142,17 +156,22 @@ void insert_lines(lines *lines, int at_line) {
 	append_lines(lines, at_line-1);
 }
 
-int main() {
+int main(int argc, char **argv) {
 	lines lines;
-	printf("%d\n", read_file("./test", &lines));
+	char filename[1024];
+	if (argc == 2) {
+		strcpy(filename, argv[1]);
+	}
+	printf("%d\n", read_file(filename, &lines));
 	char *command = NULL;
 	size_t command_len = 0;
 	
 	int current_line = 1;
 	while (-1 != getline(&command, &command_len, stdin)) {
 		struct range range = get_range(&command, lines, current_line);
-		if (range.start < 0 || range.end >= lines.length) {
+		if (range.start < 0 || range.end > lines.length) {
 			puts("?");
+			puts("tehe");
 			continue;
 		}
 		switch (*command) {
@@ -196,8 +215,19 @@ int main() {
 			case 'd':
 				delete_lines(&lines, range);
 				break;
+			case 'e':
+				free_lines(lines);
+				command += 2;
+				*strchr(command, '\n') = 0;
+				strcpy(filename, command);
+				printf("%d\n", read_file(filename, &lines));
+				break;
 			case 'w':
-				write_file("./test", lines);
+				if (*filename == 0) {
+					puts("?");	
+					continue;
+				}
+				write_file(filename, lines);
 				if (command[1] != 'q') {
 					break;
 				}
