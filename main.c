@@ -103,28 +103,7 @@ struct range get_range(char **command, lines lines, int current_line) {
 	return result;
 }
 
-void insert_lines(lines *lines, int at_line) {
-	char *line = NULL;
-	size_t line_length = 0;
-	int nread;
-	while (-1 != (nread = getline(&line, &line_length, stdin))) {
-		if (0 == strcmp(".\n", line)) {
-			return;
-		}
-		lines->length += 1;
-		if (lines->length > lines->capacity) {
-			lines->capacity *= 2;
-			lines->lines = realloc(lines->lines, lines->capacity * sizeof(*lines->lines));
-		}
-		memmove(lines->lines+at_line+1, lines->lines+at_line, ((lines->length - 1) - at_line)*sizeof(*lines->lines));
-		lines->lines[at_line].str = line;
-		lines->lines[at_line].len = nread;
-		lines->lines[at_line].cap = line_length;
-		at_line++;
-		line = NULL;
-		line_length = 0;
-	}
-}
+	
 
 
 void delete_lines(lines *lines, struct range range) {
@@ -159,6 +138,9 @@ void append_lines(lines *lines, int at_line) {
 	}
 }
 
+void insert_lines(lines *lines, int at_line) {
+	append_lines(lines, at_line-1);
+}
 
 int main() {
 	lines lines;
@@ -174,6 +156,9 @@ int main() {
 			continue;
 		}
 		switch (*command) {
+			case '\n':
+				current_line = range.start+1;
+				break;
 			case 'p':
 				print_lines(lines, range);
 				break;
@@ -213,7 +198,9 @@ int main() {
 				break;
 			case 'w':
 				write_file("./test", lines);
-				break;
+				if (command[1] != 'q') {
+					break;
+				}
 			case 'q':
 				free_lines(lines);
 				return 0;
