@@ -155,7 +155,19 @@ void append_lines(lines *lines, int at_line) {
 void insert_lines(lines *lines, int at_line) {
 	append_lines(lines, at_line-1);
 }
+char prompt = '*';
+int prompting = 0;
 
+
+__ssize_t my_getline (char **__restrict __lineptr,
+                          size_t *__restrict __n,
+                          FILE *__restrict __stream) __wur {
+
+		if (prompting) {
+			printf("%c", prompt);
+		}
+		return getline(__lineptr, __n, __stream);
+}
 int main(int argc, char **argv) {
 	lines lines;
 	char filename[1024];
@@ -167,7 +179,7 @@ int main(int argc, char **argv) {
 	size_t command_len = 0;
 	
 	int current_line = 1;
-	while (-1 != getline(&command, &command_len, stdin)) {
+	while (-1 != my_getline(&command, &command_len, stdin)) {
 		struct range range = get_range(&command, lines, current_line);
 		if (range.start < 0 || range.end > lines.length) {
 			puts("?");
@@ -177,6 +189,11 @@ int main(int argc, char **argv) {
 		switch (*command) {
 			case '\n':
 				current_line = range.start+1;
+				break;
+			case 'P':
+				prompting = 1;
+				command += 2;
+				prompt = *command;
 				break;
 			case 'p':
 				print_lines(lines, range);
