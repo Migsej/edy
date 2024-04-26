@@ -5,8 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-
 typedef struct {
 	char *str;
 	size_t cap;
@@ -108,8 +106,6 @@ struct range get_range(char **command, lines lines, int current_line) {
 	return result;
 }
 
-	
-
 
 void delete_lines(lines *lines, struct range range) {
 	assert(range.end >= range.start);
@@ -168,6 +164,9 @@ __ssize_t my_getline (char **__restrict __lineptr,
 		}
 		return getline(__lineptr, __n, __stream);
 }
+
+int marks[256];
+
 int main(int argc, char **argv) {
 	lines lines;
 	char filename[1024];
@@ -187,6 +186,12 @@ int main(int argc, char **argv) {
 			continue;
 		}
 		switch (*command) {
+			case 'k':
+				marks[*(++command)] = current_line;
+				break;
+			case '\'':
+				current_line = marks[*(++command)];
+				break;
 			case '\n':
 				current_line = range.start+1;
 				break;
