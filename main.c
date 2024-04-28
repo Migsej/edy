@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <regex.h>
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -21,6 +22,7 @@ struct range {
 	int start;
 	int end;
 };
+
 
 void write_file(char *file, lines lines) {
 	FILE *fp = fopen(file, "w");
@@ -151,6 +153,7 @@ void append_lines(lines *lines, int at_line) {
 void insert_lines(lines *lines, int at_line) {
 	append_lines(lines, at_line-1);
 }
+
 char prompt = '*';
 int prompting = 0;
 
@@ -166,6 +169,40 @@ __ssize_t my_getline (char **__restrict __lineptr,
 }
 
 int marks[256];
+
+int search_and_replace(char *command, struct range range, lines *lines) {
+	char regex_str[1024];
+	char *end = strchr(command, '/'); //TODO: handle escaping
+	memcpy(regex_str, command, end-command);
+	regex_str[end-command] = 0;
+	char replace_str[1024];
+	char *actual_end = strchr(end, '\n');
+	memcpy(replace_str , end+1, actual_end-(end+1));
+	int replace_len = actual_end-(end+1);
+	replace_str[replace_len] = 0;
+	regex_t reg;
+	int status = regcomp(&reg, regex_str, 0);
+	if (status) {
+		puts("?");
+		return 0;
+	}
+	for (int i = range.start; i <= range.end; i++) {
+		regmatch_t regex_match;
+		status = regexec(&reg, lines->lines[i].str, 1, &regex_match, 0);
+		if (status == REG_NOMATCH) continue;
+		lines->lines[i].len += replace_len - (regex_match.rm_eo - regex_match.rm_so);
+		if (lines->lines[i].len   > lines->lines[i].cap) {
+			lines->lines[i].cap *= 2;
+			lines->lines[i].str  = realloc(lines->lines[i].str, lines->lines[i].cap * sizeof(*lines->lines[i].str));
+		}
+		char temp[1024];
+		strcpy(temp, lines->lines[i].str + regex_match.rm_eo);
+		lines->lines[i].str[regex_match.rm_so] = 0;
+		strcat(lines->lines[i].str, replace_str);
+		strcat(lines->lines[i].str, temp);
+	}
+	return 1;
+}
 
 int main(int argc, char **argv) {
 	lines lines;
@@ -186,6 +223,10 @@ int main(int argc, char **argv) {
 			continue;
 		}
 		switch (*command) {
+			case 's':
+				command += 2;
+				search_and_replace(command, range, &lines);
+				break;
 			case 'k':
 				marks[*(++command)] = current_line;
 				break;
@@ -223,6 +264,9 @@ int main(int argc, char **argv) {
 					break;
 				}
 				print_line(lines, current_line);
+				break;
+			case '=':
+				printf("%d\n", current_line);
 				break;
 			case 'i':
 				insert_lines(&lines, range.start);
