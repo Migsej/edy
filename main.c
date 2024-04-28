@@ -24,6 +24,8 @@ struct range {
 };
 
 
+void exec_command(char *command, int *current_line, lines *lines, char *filename);
+
 void write_file(char *file, lines lines) {
 	FILE *fp = fopen(file, "w");
 	for (int i = 0; i < lines.length; i++) {
@@ -170,6 +172,32 @@ __ssize_t my_getline (char **__restrict __lineptr,
 
 int marks[256];
 
+
+int normal(char *command, lines *lines, int *current_line, char *filename) {
+	char regex_str[1024];
+	char *end = strchr(command, '/'); //TODO: handle escaping
+	memcpy(regex_str, command, end-command);
+	regex_str[end-command] = 0;
+	char normal_command[1024];
+	char *actual_end = strchr(end, '\n');
+	memcpy(normal_command , end+1, actual_end-(end+1));
+	int normal_command_len = actual_end-(end+1);
+	normal_command[normal_command_len] = 0;
+	regex_t reg;
+	int status = regcomp(&reg, regex_str, 0);
+	if (status) {
+		return 0;
+	}
+	for (int i = 0; i < lines->length; ++i) {
+		regmatch_t regex_match;
+		status = regexec(&reg, lines->lines[i].str, 1, &regex_match, 0);
+		if (status == REG_NOMATCH) continue;
+		int throw_away_line = i+1;
+		exec_command(normal_command, &throw_away_line, lines, filename);
+	}
+	return 1;
+}
+
 int search_and_replace(char *command, struct range range, lines *lines) {
 	char regex_str[1024];
 	char *end = strchr(command, '/'); //TODO: handle escaping
@@ -192,7 +220,7 @@ int search_and_replace(char *command, struct range range, lines *lines) {
 		if (status == REG_NOMATCH) continue;
 		lines->lines[i].len += replace_len - (regex_match.rm_eo - regex_match.rm_so);
 		if (lines->lines[i].len   > lines->lines[i].cap) {
-			lines->lines[i].cap *= 2;
+			lines->lines[i].cap = lines->lines[i].len * 2;
 			lines->lines[i].str  = realloc(lines->lines[i].str, lines->lines[i].cap * sizeof(*lines->lines[i].str));
 		}
 		char temp[1024];
@@ -202,6 +230,103 @@ int search_and_replace(char *command, struct range range, lines *lines) {
 		strcat(lines->lines[i].str, temp);
 	}
 	return 1;
+}
+
+void exec_command(char *command, int *current_line, lines *lines, char *filename) {
+	struct range range = get_range(&command, *lines, *current_line);
+	if (range.start < 0 || range.end > lines->length) {
+		puts("?");
+		puts("tehe");
+		return;
+	}
+	switch (*command) {
+		case 'g':
+			command += 2;
+			if (!normal(command, lines, current_line, filename)) {
+				puts("?");
+			}
+		break;
+		case 's':
+			command += 2;
+			if (!search_and_replace(command, range, lines)) {
+				puts("?");
+			}
+		break;
+		case 'k':
+			marks[*(++command)] = *current_line;
+		break;
+		case '\'':
+			current_line = &marks[*(++command)];
+		break;
+		case '\n':
+			*current_line = range.start+1;
+		break;
+		case 'P':
+			prompting = 1;
+			*command += 2;
+			prompt = *command;
+		break;
+		case 'p':
+			print_lines(*lines, range);
+		break;
+		case 'n':
+			print_lines_numbers(*lines, range);
+		break;
+		case '-':
+			(*current_line)--;
+			if (*current_line < 1) {
+				puts("?");
+				*current_line = 1;
+				break;
+			}
+			print_line(*lines, *current_line);
+		break;
+		case '+':
+			(*current_line)++;
+			if (*current_line > lines->length) {
+				puts("?");
+				*current_line = lines->length;
+				break;
+			}
+			print_line(*lines, *current_line);
+		break;
+		case '=':
+			printf("%d\n", *current_line);
+		break;
+		case 'i':
+			insert_lines(lines, range.start);
+		break;
+		case 'a':
+			append_lines(lines, range.start);
+		break;
+		case 'c':
+			delete_lines(lines, range);
+			insert_lines(lines, range.start);
+		break;
+		case 'd':
+			delete_lines(lines, range);
+		break;
+		case 'e':
+			free_lines(*lines);
+			command += 2;
+			*strchr(command, '\n') = 0;
+			strcpy(filename, command);
+			printf("%d\n", read_file(filename, lines));
+		break;
+		case 'w':
+			if (filename == 0) {
+				puts("?");	
+				return;
+			}
+			write_file(filename, *lines);
+			if (command[1] != 'q') {
+				break;
+		}
+		case 'q':
+			free_lines(*lines);
+			exit(0);
+		break;
+	}
 }
 
 int main(int argc, char **argv) {
@@ -216,92 +341,7 @@ int main(int argc, char **argv) {
 	
 	int current_line = 1;
 	while (-1 != my_getline(&command, &command_len, stdin)) {
-		struct range range = get_range(&command, lines, current_line);
-		if (range.start < 0 || range.end > lines.length) {
-			puts("?");
-			puts("tehe");
-			continue;
-		}
-		switch (*command) {
-			case 's':
-				command += 2;
-				search_and_replace(command, range, &lines);
-				break;
-			case 'k':
-				marks[*(++command)] = current_line;
-				break;
-			case '\'':
-				current_line = marks[*(++command)];
-				break;
-			case '\n':
-				current_line = range.start+1;
-				break;
-			case 'P':
-				prompting = 1;
-				command += 2;
-				prompt = *command;
-				break;
-			case 'p':
-				print_lines(lines, range);
-				break;
-			case 'n':
-				print_lines_numbers(lines, range);
-				break;
-			case '-':
-				current_line--;
-				if (current_line < 1) {
-					puts("?");
-					current_line = 1;
-					break;
-				}
-				print_line(lines, current_line);
-				break;
-			case '+':
-				current_line++;
-				if (current_line > lines.length) {
-					puts("?");
-					current_line = lines.length;
-					break;
-				}
-				print_line(lines, current_line);
-				break;
-			case '=':
-				printf("%d\n", current_line);
-				break;
-			case 'i':
-				insert_lines(&lines, range.start);
-				break;
-			case 'a':
-				append_lines(&lines, range.start);
-				break;
-			case 'c':
-				delete_lines(&lines, range);
-				insert_lines(&lines, range.start);
-				break;
-			case 'd':
-				delete_lines(&lines, range);
-				break;
-			case 'e':
-				free_lines(lines);
-				command += 2;
-				*strchr(command, '\n') = 0;
-				strcpy(filename, command);
-				printf("%d\n", read_file(filename, &lines));
-				break;
-			case 'w':
-				if (*filename == 0) {
-					puts("?");	
-					continue;
-				}
-				write_file(filename, lines);
-				if (command[1] != 'q') {
-					break;
-				}
-			case 'q':
-				free_lines(lines);
-				return 0;
-				break;
-		}
+		exec_command(command, &current_line, &lines, filename);
 	}
 	return 0;
 }
