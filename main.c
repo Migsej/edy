@@ -240,6 +240,10 @@ void exec_command(char *command, int *current_line, lines *lines, char *filename
 		return;
 	}
 	switch (*command) {
+		case '!':
+			command++;
+			system(command);
+		break;
 		case 'g':
 			command += 2;
 			if (!normal(command, lines, current_line, filename)) {
